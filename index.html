@@ -5,15 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Racing Game</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; }
+        body { margin: 0; overflow: hidden; background: #000; touch-action: none; }
         canvas { display: block; }
-        #hud { position: absolute; top: 10px; left: 10px; color: #0f0; font-family: monospace; font-size: 16px; }
+        #hud { position: absolute; top: 10px; left: 10px; color: #0f0; font-family: monospace; font-size: 16px; z-index: 10; }
+        #controls { position: absolute; bottom: 20px; right: 20px; width: 150px; height: 150px; z-index: 10; }
+        .btn { position: absolute; width: 50px; height: 50px; background: rgba(0,255,0,0.3); border: 2px solid #0f0; color: #0f0; font-size: 24px; font-weight: bold; border-radius: 8px; cursor: pointer; touch-action: manipulation; }
+        #btnLeft { bottom: 50px; left: 0; }
+        #btnRight { bottom: 50px; right: 0; }
+        #btnAccel { top: 0; left: 50%; transform: translateX(-50%); }
+        #btnBrake { top: 60px; left: 50%; transform: translateX(-50%); }
+        .btn:active { background: rgba(0,255,0,0.8); box-shadow: 0 0 10px rgba(0,255,0,0.8); }
     </style>
 </head>
 <body>
     <div id="hud">
         <div>Speed: <span id="speed">0</span> km/h</div>
-        <div>Use Arrow Keys to Drive</div>
+        <div>Lap: <span id="lap">0:00</span></div>
+    </div>
+    <div id="controls">
+        <button class="btn" id="btnLeft">←</button>
+        <button class="btn" id="btnRight">→</button>
+        <button class="btn" id="btnAccel">▲</button>
+        <button class="btn" id="btnBrake">▼</button>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
@@ -37,7 +50,6 @@
         sun.shadow.mapSize.width = 2048;
         sun.shadow.mapSize.height = 2048;
         scene.add(sun);
-
         scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
         // Ground/Track
@@ -89,19 +101,49 @@
         const keys = {};
         let carSpeed = 0;
         let carRotation = 0;
+        let lapStart = Date.now();
 
-        document.addEventListener('keydown', (e) => keys[e.key] = true);
-        document.addEventListener('keyup', (e) => keys[e.key] = false);
+        // Touch controls
+        const btnLeft = document.getElementById('btnLeft');
+        const btnRight = document.getElementById('btnRight');
+        const btnAccel = document.getElementById('btnAccel');
+        const btnBrake = document.getElementById('btnBrake');
+
+        const touchStart = (id) => (e) => { e.preventDefault(); keys[id] = true; };
+        const touchEnd = (id) => (e) => { e.preventDefault(); keys[id] = false; };
+
+        btnLeft.addEventListener('touchstart', touchStart('left'));
+        btnLeft.addEventListener('touchend', touchEnd('left'));
+        btnRight.addEventListener('touchstart', touchStart('right'));
+        btnRight.addEventListener('touchend', touchEnd('right'));
+        btnAccel.addEventListener('touchstart', touchStart('accel'));
+        btnAccel.addEventListener('touchend', touchEnd('accel'));
+        btnBrake.addEventListener('touchstart', touchStart('brake'));
+        btnBrake.addEventListener('touchend', touchEnd('brake'));
+
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp' || e.key === 'w') keys['accel'] = true;
+            if (e.key === 'ArrowDown' || e.key === 's') keys['brake'] = true;
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys['left'] = true;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys['right'] = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowUp' || e.key === 'w') keys['accel'] = false;
+            if (e.key === 'ArrowDown' || e.key === 's') keys['brake'] = false;
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys['left'] = false;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys['right'] = false;
+        });
 
         // Animation loop
         function animate() {
             requestAnimationFrame(animate);
 
             // Controls
-            if (keys['ArrowUp'] || keys['w']) carSpeed = Math.min(carSpeed + 0.5, 30);
-            if (keys['ArrowDown'] || keys['s']) carSpeed = Math.max(carSpeed - 0.5, -10);
-            if (keys['ArrowLeft'] || keys['a']) carRotation += 0.05;
-            if (keys['ArrowRight'] || keys['d']) carRotation -= 0.05;
+            if (keys['accel']) carSpeed = Math.min(carSpeed + 0.5, 30);
+            if (keys['brake']) carSpeed = Math.max(carSpeed - 0.5, -10);
+            if (keys['left']) carRotation += 0.05;
+            if (keys['right']) carRotation -= 0.05;
 
             carSpeed *= 0.95; // friction
 
@@ -112,7 +154,10 @@
 
             // Keep car on track
             if (Math.abs(carGroup.position.x) > 10) carGroup.position.x = Math.sign(carGroup.position.x) * 10;
-            if (carGroup.position.z > 100) carGroup.position.z = -250;
+            if (carGroup.position.z > 100) {
+                carGroup.position.z = -250;
+                lapStart = Date.now();
+            }
 
             // Camera follow
             const camX = carGroup.position.x - Math.sin(carRotation) * 8;
@@ -122,6 +167,11 @@
 
             // Update HUD
             document.getElementById('speed').textContent = Math.abs(Math.floor(carSpeed * 10));
+            
+            const elapsed = Math.floor((Date.now() - lapStart) / 1000);
+            const mins = Math.floor(elapsed / 60);
+            const secs = elapsed % 60;
+            document.getElementById('lap').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
 
             renderer.render(scene, camera);
         }
