@@ -5,16 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Racing Game</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; touch-action: none; }
-        canvas { display: block; }
-        #hud { position: absolute; top: 10px; left: 10px; color: #0f0; font-family: monospace; font-size: 16px; z-index: 10; }
-        #controls { position: absolute; bottom: 20px; right: 20px; width: 150px; height: 150px; z-index: 10; }
-        .btn { position: absolute; width: 50px; height: 50px; background: rgba(0,255,0,0.3); border: 2px solid #0f0; color: #0f0; font-size: 24px; font-weight: bold; border-radius: 8px; cursor: pointer; touch-action: manipulation; }
-        #btnLeft { bottom: 50px; left: 0; }
-        #btnRight { bottom: 50px; right: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { width: 100%; height: 100vh; overflow: hidden; background: #000; touch-action: none; }
+        canvas { display: block; width: 100%; height: 100%; }
+        #hud { position: absolute; top: 20px; left: 20px; color: #0f0; font-family: monospace; font-size: 18px; z-index: 10; text-shadow: 0 0 10px #0f0; }
+        #controls { position: absolute; bottom: 30px; right: 30px; width: 160px; height: 160px; z-index: 10; }
+        .btn { position: absolute; width: 55px; height: 55px; background: rgba(0,255,0,0.4); border: 3px solid #0f0; color: #0f0; font-size: 28px; font-weight: bold; border-radius: 10px; cursor: pointer; touch-action: manipulation; user-select: none; transition: all 0.1s; }
+        #btnLeft { bottom: 55px; left: 0; }
+        #btnRight { bottom: 55px; right: 0; }
         #btnAccel { top: 0; left: 50%; transform: translateX(-50%); }
-        #btnBrake { top: 60px; left: 50%; transform: translateX(-50%); }
-        .btn:active { background: rgba(0,255,0,0.8); box-shadow: 0 0 10px rgba(0,255,0,0.8); }
+        #btnBrake { top: 70px; left: 50%; transform: translateX(-50%); }
+        .btn:active { background: rgba(0,255,0,0.9); box-shadow: 0 0 20px rgba(0,255,0,1); }
     </style>
 </head>
 <body>
@@ -28,161 +29,186 @@
         <button class="btn" id="btnAccel">▲</button>
         <button class="btn" id="btnBrake">▼</button>
     </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
-        // Scene setup
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB);
-        scene.fog = new THREE.Fog(0x87CEEB, 400, 1000);
-
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
-        camera.position.set(0, 5, -15);
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-        document.body.appendChild(renderer.domElement);
-
-        // Lighting
-        const sun = new THREE.DirectionalLight(0xffffff, 1);
-        sun.position.set(100, 100, 100);
-        sun.castShadow = true;
-        sun.shadow.mapSize.width = 2048;
-        sun.shadow.mapSize.height = 2048;
-        scene.add(sun);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-
-        // Ground/Track
-        const trackGeom = new THREE.PlaneGeometry(20, 500);
-        const trackMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
-        const track = new THREE.Mesh(trackGeom, trackMat);
-        track.rotation.x = -Math.PI / 2;
-        track.receiveShadow = true;
-        scene.add(track);
-
-        // Road markings
-        const lineGeom = new THREE.BufferGeometry();
-        const positions = [];
-        for (let i = 0; i < 50; i++) {
-            positions.push(-0.5, 0.01, -i * 10);
-            positions.push(0.5, 0.01, -i * 10);
+        // Check WebGL support
+        function isWebGLAvailable() {
+            try {
+                const canvas = document.createElement('canvas');
+                return !!(window.WebGLRenderingContext && (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+            } catch(e) { return false; }
         }
-        lineGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 2 });
-        const lines = new THREE.LineSegments(lineGeom, lineMat);
-        scene.add(lines);
 
-        // Car
-        const carGroup = new THREE.Group();
-        const bodyGeom = new THREE.BoxGeometry(2, 1.2, 4);
-        const bodyMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
-        const body = new THREE.Mesh(bodyGeom, bodyMat);
-        body.castShadow = true;
-        body.receiveShadow = true;
-        carGroup.add(body);
+        if (!isWebGLAvailable()) {
+            document.body.innerHTML = '<div style="color: white; text-align: center; margin-top: 50px;"><h1>WebGL not supported</h1><p>Please use a modern browser</p></div>';
+        } else {
+            // Scene setup
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(0x87CEEB, 400, 1000);
 
-        // Wheels
-        const wheelGeom = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 16);
-        const wheelMat = new THREE.MeshPhongMaterial({ color: 0x000000 });
-        const wheelPositions = [[-0.8, -0.6, 0.8], [0.8, -0.6, 0.8], [-0.8, -0.6, -0.8], [0.8, -0.6, -0.8]];
-        
-        wheelPositions.forEach(pos => {
-            const wheel = new THREE.Mesh(wheelGeom, wheelMat);
-            wheel.rotation.z = Math.PI / 2;
-            wheel.position.set(...pos);
-            wheel.castShadow = true;
-            carGroup.add(wheel);
-        });
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
+            camera.position.set(0, 5, -15);
 
-        carGroup.position.y = 1;
-        scene.add(carGroup);
+            const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
 
-        // Game state
-        const keys = {};
-        let carSpeed = 0;
-        let carRotation = 0;
-        let lapStart = Date.now();
+            // Lighting
+            const sun = new THREE.DirectionalLight(0xffffff, 1);
+            sun.position.set(100, 100, 100);
+            sun.castShadow = true;
+            sun.shadow.mapSize.width = 2048;
+            sun.shadow.mapSize.height = 2048;
+            scene.add(sun);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
-        // Touch controls
-        const btnLeft = document.getElementById('btnLeft');
-        const btnRight = document.getElementById('btnRight');
-        const btnAccel = document.getElementById('btnAccel');
-        const btnBrake = document.getElementById('btnBrake');
+            // Ground/Track
+            const trackGeom = new THREE.PlaneGeometry(20, 500);
+            const trackMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+            const track = new THREE.Mesh(trackGeom, trackMat);
+            track.rotation.x = -Math.PI / 2;
+            track.receiveShadow = true;
+            scene.add(track);
 
-        const touchStart = (id) => (e) => { e.preventDefault(); keys[id] = true; };
-        const touchEnd = (id) => (e) => { e.preventDefault(); keys[id] = false; };
+            // Road markings
+            const lineGeom = new THREE.BufferGeometry();
+            const positions = [];
+            for (let i = 0; i < 50; i++) {
+                positions.push(-0.5, 0.01, -i * 10);
+                positions.push(0.5, 0.01, -i * 10);
+            }
+            lineGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+            const lineMat = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 2 });
+            const lines = new THREE.LineSegments(lineGeom, lineMat);
+            scene.add(lines);
 
-        btnLeft.addEventListener('touchstart', touchStart('left'));
-        btnLeft.addEventListener('touchend', touchEnd('left'));
-        btnRight.addEventListener('touchstart', touchStart('right'));
-        btnRight.addEventListener('touchend', touchEnd('right'));
-        btnAccel.addEventListener('touchstart', touchStart('accel'));
-        btnAccel.addEventListener('touchend', touchEnd('accel'));
-        btnBrake.addEventListener('touchstart', touchStart('brake'));
-        btnBrake.addEventListener('touchend', touchEnd('brake'));
+            // Car
+            const carGroup = new THREE.Group();
+            const bodyGeom = new THREE.BoxGeometry(2, 1.2, 4);
+            const bodyMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+            const body = new THREE.Mesh(bodyGeom, bodyMat);
+            body.castShadow = true;
+            body.receiveShadow = true;
+            carGroup.add(body);
 
-        // Keyboard controls
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowUp' || e.key === 'w') keys['accel'] = true;
-            if (e.key === 'ArrowDown' || e.key === 's') keys['brake'] = true;
-            if (e.key === 'ArrowLeft' || e.key === 'a') keys['left'] = true;
-            if (e.key === 'ArrowRight' || e.key === 'd') keys['right'] = true;
-        });
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'ArrowUp' || e.key === 'w') keys['accel'] = false;
-            if (e.key === 'ArrowDown' || e.key === 's') keys['brake'] = false;
-            if (e.key === 'ArrowLeft' || e.key === 'a') keys['left'] = false;
-            if (e.key === 'ArrowRight' || e.key === 'd') keys['right'] = false;
-        });
+            // Wheels
+            const wheelGeom = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 16);
+            const wheelMat = new THREE.MeshPhongMaterial({ color: 0x000000 });
+            const wheelPositions = [[-0.8, -0.6, 0.8], [0.8, -0.6, 0.8], [-0.8, -0.6, -0.8], [0.8, -0.6, -0.8]];
+            
+            wheelPositions.forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeom, wheelMat);
+                wheel.rotation.z = Math.PI / 2;
+                wheel.position.set(...pos);
+                wheel.castShadow = true;
+                carGroup.add(wheel);
+            });
 
-        // Animation loop
-        function animate() {
-            requestAnimationFrame(animate);
+            carGroup.position.y = 1;
+            scene.add(carGroup);
 
-            // Controls
-            if (keys['accel']) carSpeed = Math.min(carSpeed + 0.5, 30);
-            if (keys['brake']) carSpeed = Math.max(carSpeed - 0.5, -10);
-            if (keys['left']) carRotation += 0.05;
-            if (keys['right']) carRotation -= 0.05;
+            // Game state
+            const keys = {};
+            let carSpeed = 0;
+            let carRotation = 0;
+            let lapStart = Date.now();
 
-            carSpeed *= 0.95; // friction
+            // Touch controls
+            const btnLeft = document.getElementById('btnLeft');
+            const btnRight = document.getElementById('btnRight');
+            const btnAccel = document.getElementById('btnAccel');
+            const btnBrake = document.getElementById('btnBrake');
 
-            // Move car
-            carGroup.position.z += Math.cos(carRotation) * carSpeed;
-            carGroup.position.x += Math.sin(carRotation) * carSpeed;
-            carGroup.rotation.y = carRotation;
+            const touchStart = (id) => (e) => { e.preventDefault(); keys[id] = true; };
+            const touchEnd = (id) => (e) => { e.preventDefault(); keys[id] = false; };
 
-            // Keep car on track
-            if (Math.abs(carGroup.position.x) > 10) carGroup.position.x = Math.sign(carGroup.position.x) * 10;
-            if (carGroup.position.z > 100) {
-                carGroup.position.z = -250;
-                lapStart = Date.now();
+            btnLeft.addEventListener('touchstart', touchStart('left'), false);
+            btnLeft.addEventListener('touchend', touchEnd('left'), false);
+            btnLeft.addEventListener('mousedown', touchStart('left'), false);
+            btnLeft.addEventListener('mouseup', touchEnd('left'), false);
+
+            btnRight.addEventListener('touchstart', touchStart('right'), false);
+            btnRight.addEventListener('touchend', touchEnd('right'), false);
+            btnRight.addEventListener('mousedown', touchStart('right'), false);
+            btnRight.addEventListener('mouseup', touchEnd('right'), false);
+
+            btnAccel.addEventListener('touchstart', touchStart('accel'), false);
+            btnAccel.addEventListener('touchend', touchEnd('accel'), false);
+            btnAccel.addEventListener('mousedown', touchStart('accel'), false);
+            btnAccel.addEventListener('mouseup', touchEnd('accel'), false);
+
+            btnBrake.addEventListener('touchstart', touchStart('brake'), false);
+            btnBrake.addEventListener('touchend', touchEnd('brake'), false);
+            btnBrake.addEventListener('mousedown', touchStart('brake'), false);
+            btnBrake.addEventListener('mouseup', touchEnd('brake'), false);
+
+            // Keyboard controls
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowUp' || e.key === 'w') keys['accel'] = true;
+                if (e.key === 'ArrowDown' || e.key === 's') keys['brake'] = true;
+                if (e.key === 'ArrowLeft' || e.key === 'a') keys['left'] = true;
+                if (e.key === 'ArrowRight' || e.key === 'd') keys['right'] = true;
+            });
+            document.addEventListener('keyup', (e) => {
+                if (e.key === 'ArrowUp' || e.key === 'w') keys['accel'] = false;
+                if (e.key === 'ArrowDown' || e.key === 's') keys['brake'] = false;
+                if (e.key === 'ArrowLeft' || e.key === 'a') keys['left'] = false;
+                if (e.key === 'ArrowRight' || e.key === 'd') keys['right'] = false;
+            });
+
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+
+                // Controls
+                if (keys['accel']) carSpeed = Math.min(carSpeed + 0.5, 30);
+                if (keys['brake']) carSpeed = Math.max(carSpeed - 0.5, -10);
+                if (keys['left']) carRotation += 0.05;
+                if (keys['right']) carRotation -= 0.05;
+
+                carSpeed *= 0.95; // friction
+
+                // Move car
+                carGroup.position.z += Math.cos(carRotation) * carSpeed;
+                carGroup.position.x += Math.sin(carRotation) * carSpeed;
+                carGroup.rotation.y = carRotation;
+
+                // Keep car on track
+                if (Math.abs(carGroup.position.x) > 10) carGroup.position.x = Math.sign(carGroup.position.x) * 10;
+                if (carGroup.position.z > 100) {
+                    carGroup.position.z = -250;
+                    lapStart = Date.now();
+                }
+
+                // Camera follow
+                const camX = carGroup.position.x - Math.sin(carRotation) * 8;
+                const camZ = carGroup.position.z - Math.cos(carRotation) * 8;
+                camera.position.lerp(new THREE.Vector3(camX, 6, camZ), 0.1);
+                camera.lookAt(carGroup.position.x, 1, carGroup.position.z);
+
+                // Update HUD
+                document.getElementById('speed').textContent = Math.abs(Math.floor(carSpeed * 10));
+                
+                const elapsed = Math.floor((Date.now() - lapStart) / 1000);
+                const mins = Math.floor(elapsed / 60);
+                const secs = elapsed % 60;
+                document.getElementById('lap').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+
+                renderer.render(scene, camera);
             }
 
-            // Camera follow
-            const camX = carGroup.position.x - Math.sin(carRotation) * 8;
-            const camZ = carGroup.position.z - Math.cos(carRotation) * 8;
-            camera.position.lerp(new THREE.Vector3(camX, 6, camZ), 0.1);
-            camera.lookAt(carGroup.position.x, 1, carGroup.position.z);
+            animate();
 
-            // Update HUD
-            document.getElementById('speed').textContent = Math.abs(Math.floor(carSpeed * 10));
-            
-            const elapsed = Math.floor((Date.now() - lapStart) / 1000);
-            const mins = Math.floor(elapsed / 60);
-            const secs = elapsed % 60;
-            document.getElementById('lap').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-
-            renderer.render(scene, camera);
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
         }
-
-        animate();
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
     </script>
 </body>
 </html>
